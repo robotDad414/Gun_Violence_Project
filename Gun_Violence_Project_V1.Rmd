@@ -1,0 +1,106 @@
+---
+title: "Gun Violence Project"
+author: "Chris Moore"
+date: "2023-05-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tree)
+library(randomForest)
+library(lubridate)
+library(dplyr)
+library(parsedate)
+```
+
+**Loading Data and merge data** \## Need to update datasets currently only have incident data from 20-23 and legislation data from 1991-2019
+
+```{r}
+
+
+GV_2012_2023 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2012_2023.csv")
+GV_2020_2023 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2020_2023.csv")
+GV_2019 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2019.csv")
+GV_2018 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2018.csv")
+GV_2017 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2017.csv")
+GV_2016 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2016.csv")
+GV_2015 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2015.csv")
+GV_2014 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2014.csv")
+GV_2013 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2013.csv")
+Law_DB_raw <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/gun_laws.csv")
+
+#Combining all GV data frames into one. 
+GV_DB_raw <- rbind(GV_2012_2023,GV_2020_2023,GV_2019,GV_2018,GV_2017,GV_2016,GV_2015,GV_2014,GV_2013)
+
+```
+
+***Clean and transform Data**
+
+```{r}
+GV_Clean = subset(GV_DB_raw, select = -c(Address,X..Subjects.Suspects.Killed,X..Subjects.Suspects.Arrested,X..Subjects.Suspects.Injured,Operations) )
+
+colnames(GV_Clean)[which(names(GV_Clean) == "Incident.Date")] <- "Year"
+colnames(Law_DB_raw)[which(names(Law_DB_raw) == "YEAR")] <- "Year"
+colnames(Law_DB_raw)[which(names(Law_DB_raw) == "STATE")] <- "State"
+
+GV_Clean <- GV_Clean %>% distinct(Incident.ID, .keep_all = TRUE)
+```
+
+```{r}
+##Using parse_date function to make all dates uniform
+GV_Clean <- GV_Clean %>%      
+  mutate(Year = parse_date(Year))
+```
+
+```{r}
+#Check class of Year column
+class(GV_Clean$Year)
+
+# Convert to class date and then reformat as Year only
+GV_Clean <- GV_Clean %>% 
+  mutate(Year = as.Date(Year, format = "%Y-%m-%d"))
+GV_Clean$Year<-format(GV_Clean$Year, format = "%Y")
+
+#Convert back to integer for further processing
+GV_Clean$Year <- as.integer(GV_Clean$Year) 
+
+#Check class of data column
+class(GV_Clean$Year)
+class(Law_DB_raw$Year)
+```
+
+
+
+**Combining DF of Gun Violence Events with DF of Gun Legislation**
+
+```{r}
+
+Master_Clean <- merge(x=GV_Clean,y=Law_DB_raw, 
+        by=c("Year","State"), all=TRUE)
+```
+
+
+**Creating subset of data from 2013-2019 because we only have data in both sets for those years.**
+```{r}
+Master_2013_2019<-subset(Master_Clean, Year >= 2013 & Year <= 2019)
+```
+
+
+```{r fig.height = 10, fig.width = 20}
+ggplot(Master_2013_2019, aes(x=State,y=X..Victims.Killed,fill=State))+
+  geom_col()+
+  xlab("State") + 
+  ylab("# of Victims") +
+  ggtitle("Count of Victims based on State")
+```
+
+**Citations** 
+
+Gun Legislation (Law_Db_raw)
+Data Siegel, Michael. State Firearm Law Database: State Firearm Laws, 1991-2019. Inter-university Consortium for Political and Social Research [distributor], 2020-02-26. <https://doi.org/10.3886/ICPSR37363.v1>
+
+Gun Violence Incidentss (GV_DB_raw)
+Gun Violence Archive. https://www.gunviolencearchive.org
