@@ -14,12 +14,15 @@ library(randomForest)
 library(lubridate)
 library(dplyr)
 library(parsedate)
+library(leaps)
+library(purrr)
 ```
-
-**Loading Data and merge data** \## Need to update datasets currently only have incident data from 20-23 and legislation data from 1991-2019
+## Date Ingest 
+**Loading Data and merge data** \## Need to update datasets currently only have incident data from 2013-2023 and legislation data from 1991-2019
 
 ```{r}
 
+#Load and aggregate Data
 
 GV_2012_2023 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2012_2023.csv")
 GV_2020_2023 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2020_2023.csv")
@@ -30,58 +33,68 @@ GV_2016 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Vi
 GV_2015 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2015.csv")
 GV_2014 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2014.csv")
 GV_2013 <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Violence Archive Data/GV_2013.csv")
-Law_DB_raw <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/gun_laws.csv")
+Law_DB_raw <- read.csv("/Users/christophermoore/Desktop/Gun Violence Project/Gun Laws/gun_laws.csv")
 
 #Combining all GV data frames into one. 
 GV_DB_raw <- rbind(GV_2012_2023,GV_2020_2023,GV_2019,GV_2018,GV_2017,GV_2016,GV_2015,GV_2014,GV_2013)
 
 ```
 
-***Clean and transform Data**
+```{r}
+
+#Law_DB_raw %>% summarise(across(everything(), ~ sum(is.na(.))))
+
+# Law_DB_raw %>%
+#     select_if(is.numeric) %>%
+#     map_dbl(sum)
+```
+
+## Data Cleaning and Transformation
+***In the code chunks below we are going to perform several operations (comments will provide further description)**
 
 ```{r}
-GV_Clean = subset(GV_DB_raw, select = -c(Address,X..Subjects.Suspects.Killed,X..Subjects.Suspects.Arrested,X..Subjects.Suspects.Injured,Operations) )
 
+# Removing variables from the GV DB that won't be used in the initial analysis. These variables are interesting and informative, but for the initial analysis will only add noise.
+GV_Clean = subset(GV_DB_raw, select = -c(City.Or.County,Address,X..Subjects.Suspects.Killed,X..Subjects.Suspects.Arrested,X..Subjects.Suspects.Injured,Operations) )
+
+#Transforming the column names to be uniform across both DBs.
 colnames(GV_Clean)[which(names(GV_Clean) == "Incident.Date")] <- "Year"
 colnames(Law_DB_raw)[which(names(Law_DB_raw) == "YEAR")] <- "Year"
 colnames(Law_DB_raw)[which(names(Law_DB_raw) == "STATE")] <- "State"
 
+#Removing duplicates from GV_Clean. We could have done this earlier, but I wanted to create a complete GV DB at the top
 GV_Clean <- GV_Clean %>% distinct(Incident.ID, .keep_all = TRUE)
-```
 
-```{r}
-##Using parse_date function to make all dates uniform
+#Converting 0 and 1 to logical true false for linreg
+Law_DB_raw[, 3:137] <- lapply(Law_DB_raw[, 3:137], as.logical)
+
+##Using parse_date function to make all dates a uniform format.
 GV_Clean <- GV_Clean %>%      
   mutate(Year = parse_date(Year))
-```
 
-```{r}
-#Check class of Year column
-class(GV_Clean$Year)
-
-# Convert to class date and then reformat as Year only
+# Convert to Year to class date and then reformat as Year only
 GV_Clean <- GV_Clean %>% 
   mutate(Year = as.Date(Year, format = "%Y-%m-%d"))
 GV_Clean$Year<-format(GV_Clean$Year, format = "%Y")
 
-#Convert back to integer for further processing
+#Convert back to integer for further processing. This was done for filtering operations seen below.
 GV_Clean$Year <- as.integer(GV_Clean$Year) 
 
-#Check class of data column
-class(GV_Clean$Year)
-class(Law_DB_raw$Year)
+
+#Check class of Year column in both DBs to confirm they are both integers.
+#class(GV_Clean$Year)
+#class(Law_DB_raw$Year)
+
 ```
-
-
-
+## Final aggregation and filtering of data before analysis
 **Combining DF of Gun Violence Events with DF of Gun Legislation**
 
 ```{r}
 
 Master_Clean <- merge(x=GV_Clean,y=Law_DB_raw, 
         by=c("Year","State"), all=TRUE)
-```
 
+```
 
 **Creating subset of data from 2013-2019 because we only have data in both sets for those years.**
 ```{r}
@@ -89,7 +102,18 @@ Master_2013_2019<-subset(Master_Clean, Year >= 2013 & Year <= 2019)
 ```
 
 
+## Analysis first steps.
+**In the chunks below we are going to run some simple mulitple linear regression models. We are going to need to work with the data more after this, but this will inform how we need to modify the DB**
+```{r}
+lm1 <- lm(Master_2013_2019,formula=X..Victims.Killed ~.)
+summary(lm1)
+```
+
+
+
+
 ```{r fig.height = 10, fig.width = 20}
+
 ggplot(Master_2013_2019, aes(x=State,y=X..Victims.Killed,fill=State))+
   geom_col()+
   xlab("State") + 
